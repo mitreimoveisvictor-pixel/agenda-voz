@@ -85,15 +85,26 @@
         </select></div>
       <div><label>Local (opcional)</label><input id="fLocal" placeholder="Endereço"></div>
     </div>
+    <label>Lembrete</label>
+    <select id="fRem">
+      <option value="">Padrão da agenda</option>
+      <option value="10">10 min antes</option>
+      <option value="30">30 min antes</option>
+      <option value="60">1 hora antes</option>
+      <option value="120">2 horas antes</option>
+      <option value="1440">1 dia antes</option>
+      <option value="60,1440">1 hora + 1 dia antes</option>
+    </select>
     <a class="save off" id="save" href="#" target="_blank" rel="noopener">✅ Salvar no Google Agenda</a>
-    <div class="ok" id="ok">Abriu o Google Agenda — toque em <b>Save / Salvar</b> lá. Depois volte aqui para lançar o próximo.</div>
-    <p class="nota">Abre o Google Agenda já preenchido — é só tocar em <b>Save / Salvar</b>. O aviso no celular segue as <b>notificações padrão</b> da sua agenda (ajuste uma vez em Configurações → Notificações do evento).</p>
+    <div class="ok" id="ok"></div>
+    <p class="nota" id="notaModo"></p>
   </div>
 
   <div class="card">
     <h2>Últimos lançados</h2>
     <ul class="hist" id="hist"></ul>
   </div>
+  <p class="nota" id="cfgInfo" style="text-align:center"></p>
 </div>
 
 <script>
@@ -108,7 +119,7 @@ function interpretar(texto, agora){
   agora = agora || new Date();
   let n = semAcento(texto);
   let t = texto.split('');
-  const r = {titulo:'', data:null, hora:null, min:0, dur:60, diaTodo:false};
+  const r = {titulo:'', data:null, hora:null, min:0, dur:60, diaTodo:false, lembrete:null};
   function take(re){
     const m = re.exec(n);
     if(m){ for(let i=m.index;i<m.index+m[0].length;i++){ t[i]=' '; } n = n.slice(0,m.index)+' '.repeat(m[0].length)+n.slice(m.index+m[0].length); }
@@ -140,6 +151,11 @@ function interpretar(texto, agora){
     let diff = (DIAS[m[1]] - hoje.getDay() + 7) % 7; if(diff===0) diff = 7;
     r.data = addDias(diff);
   }
+  // ---- LEMBRETE ("me lembra 1 hora antes") ----
+  if((m = take(/\b(?:e\s+)?(?:me\s+)?(?:lembr\w*|avis\w*|notific\w*)(?:\s+(?:me|com|de))?\s+(meia|\d{1,3}|uma|um|duas|dois|tres)\s*(minutos?|min|horas?|h|dias?)\s*antes\b/))){
+    let v = m[1]==='meia' ? 0.5 : (NUMS[m[1]] || +m[1]);
+    r.lembrete = /^d/.test(m[2]) ? Math.round(v*1440) : (/^h/.test(m[2]) ? Math.round(v*60) : Math.round(v));
+  } else if((m = take(/\b(?:e\s+)?(?:me\s+)?(?:lembr\w*|avis\w*)(?:\s+(?:me|com))?\s+meia\s+hora\s+antes\b/))){ r.lembrete = 30; }
   // ---- DURAÇÃO ----
   if((m = take(/\b(?:por|durante)\s+(meia|\d{1,3}|uma|duas|tres)\s*(horas?|h|minutos?|min)\b/))){
     let v = m[1]==='meia' ? 0.5 : (NUMS[m[1]] || +m[1]);
@@ -200,6 +216,8 @@ function preencher(){
   $('fData').value = r.data ? ymd(r.data) : '';
   $('fHora').value = r.hora!==null ? pad(r.hora)+':'+pad(r.min) : '';
   $('fDur').value = r.diaTodo ? 'dia' : (['15','30','60','90','120','180'].includes(String(r.dur)) ? String(r.dur) : '60');
+  if(r.lembrete!==null){ const sel=$('fRem'); if(![...sel.options].some(o=>o.value===String(r.lembrete))){ const o=document.createElement('option'); o.value=String(r.lembrete); o.textContent=r.lembrete+' min antes'; sel.append(o);} sel.value=String(r.lembrete); }
+  else $('fRem').value = '';
   atualizar();
 }
 
@@ -229,7 +247,57 @@ function montar(){
     + '&ctz=America/Fortaleza'
     + '&details=' + encodeURIComponent('Lançado pelo Agenda por Voz: "' + $('txt').value.trim() + '"')
     + (local ? '&location=' + encodeURIComponent(local) : '');
-  return {url, titulo, quando};
+  const diaTodo = (dur==='dia' || !hora);
+  const fimDate = diaTodo ? null : new Date(ini.getTime() + (+dur)*60000);
+  const rem = $('fRem').value;
+  const payload = {
+    titulo, local, diaTodo,
+    data: data,
+    inicio: diaTodo ? null : ini.toISOString(),
+    fim: diaTodo ? null : fimDate.toISOString(),
+    lembretes: rem ? rem.split(',').map(Number) : null,
+    descricao: 'Lançado pelo Agenda por Voz: "' + $('txt').value.trim() + '"'
+  };
+  return {url, titulo, quando, payload};
+}
+
+// ---- conexão direta (Google Apps Script) ----
+function lerCfg(){ try{ return JSON.parse(localStorage.getItem('agvoz_cfg')||'null'); }catch(e){ return null; } }
+function gravarCfg(c){ try{ if(c) localStorage.setItem('agvoz_cfg', JSON.stringify(c)); else localStorage.removeItem('agvoz_cfg'); }catch(e){} }
+(function(){ // link de configuração: #cfg=<base64 de {"u":..,"t":..}>
+  const h = location.hash;
+  if(h.startsWith('#cfg=')){
+    try{ const c = JSON.parse(atob(decodeURIComponent(h.slice(5)))); if(c.u && c.t){ gravarCfg({url:c.u, token:c.t}); } }catch(e){}
+    try{ history.replaceState(null,'',location.pathname); }catch(e){ location.hash=''; }
+  }
+})();
+function mostrarModo(){
+  const c = lerCfg();
+  $('notaModo').innerHTML = c
+    ? '⚡ <b>Modo direto ativo:</b> ao tocar em Salvar, o compromisso já vai para a sua agenda, com o lembrete escolhido.'
+    : 'Abre o Google Agenda já preenchido — é só tocar em <b>Save / Salvar</b>. (Modo direto ainda não conectado.)';
+  $('cfgInfo').innerHTML = c ? '🔗 Conectado à sua Google Agenda · <a href="#" id="desc" style="color:#7fb0ff">desconectar</a>' : '';
+  const d = $('desc'); if(d) d.onclick = ev => { ev.preventDefault(); gravarCfg(null); mostrarModo(); };
+}
+async function salvarDireto(ev, c){
+  const a = $('save'), ok = $('ok');
+  a.classList.add('off'); a.textContent = '⏳ Salvando…';
+  try{
+    const r = await fetch(c.url, {method:'POST', body: JSON.stringify(Object.assign({token:c.token}, ev.payload))});
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.erro||'falhou');
+    gravarHist(ev);
+    ok.innerHTML = '✅ <b>Salvo na sua agenda!</b> ' + ev.titulo + ' — ' + ev.quando;
+    ok.classList.add('show');
+    try{ navigator.vibrate && navigator.vibrate(80); }catch(e){}
+    setTimeout(()=>{ $('txt').value=''; $('fLocal').value=''; preencher(); }, 1200);
+    setTimeout(()=>ok.classList.remove('show'), 6000);
+  }catch(e){
+    ok.innerHTML = '⚠️ Não consegui salvar direto (' + (e.message||'erro') + '). <a href="'+ev.url+'" target="_blank" rel="noopener" style="color:#8fe0b4">Toque aqui para salvar pelo Google Agenda</a>.';
+    ok.classList.add('show');
+  }finally{
+    a.textContent = '✅ Salvar no Google Agenda'; atualizar();
+  }
 }
 
 function atualizar(){
@@ -249,14 +317,23 @@ function mostrarHist(){
     const a=document.createElement('a'); a.href=x.u; a.target='_blank'; a.rel='noopener'; a.textContent='abrir'; li.append(s,a); ul.append(li); });
 }
 
-$('save').addEventListener('click', ()=>{ const ev = montar(); if(ev){ gravarHist(ev); $('ok').classList.add('show'); setTimeout(()=>{ $('txt').value=''; $('fLocal').value=''; preencher(); }, 1500); } });
+$('save').addEventListener('click', e=>{
+  const ev = montar(); if(!ev) return;
+  const c = lerCfg();
+  if(c){ e.preventDefault(); salvarDireto(ev, c); return; }
+  gravarHist(ev);
+  $('ok').innerHTML = 'Abriu o Google Agenda — toque em <b>Save / Salvar</b> lá. Depois volte aqui para lançar o próximo.';
+  $('ok').classList.add('show');
+  setTimeout(()=>{ $('txt').value=''; $('fLocal').value=''; preencher(); }, 1500);
+});
+mostrarModo();
 
 // instalar como app (Android/Chrome)
 let pedido = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); pedido = e; $('inst').classList.add('show'); });
 $('inst').addEventListener('click', async ()=>{ if(!pedido) return; pedido.prompt(); try{ await pedido.userChoice; }catch(e){} pedido=null; $('inst').classList.remove('show'); });
 try{ if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){}
-['fTitulo','fData','fHora','fDur','fLocal'].forEach(id => $(id).addEventListener('input', atualizar));
+['fTitulo','fData','fHora','fDur','fLocal','fRem'].forEach(id => $(id).addEventListener('input', atualizar));
 let tmr; $('txt').addEventListener('input', ()=>{ clearTimeout(tmr); tmr = setTimeout(preencher, 250); });
 
 // exemplos
