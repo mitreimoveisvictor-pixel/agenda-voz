@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agenda Voz">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Agenda por Voz — Paulo Mitre</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0b1220;--card:#131c2e;--line:#22304a;--txt:#e8eefc;--mut:#8a9bbd;--acc:#1a73e8;--ok:#1e9e5a;--warn:#f5a623}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+  .wrap{max-width:520px;margin:0 auto;padding:calc(22px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(60px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+  html{-webkit-tap-highlight-color:transparent}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .inst{display:none;border:1px solid var(--acc);background:transparent;color:#7fb0ff;border-radius:999px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;white-space:nowrap}
+  .inst.show{display:block}
+  .ok{display:none;margin-top:12px;background:#0f2a1c;border:1px solid #1e6b42;color:#8fe0b4;border-radius:12px;padding:10px 12px;font-size:14px}
+  .ok.show{display:block}
+  h1{font-size:22px;margin:0 0 4px;font-weight:800}
+  .sub{color:var(--mut);font-size:14px;margin:0 0 20px}
+  .mic{width:100%;border:0;border-radius:22px;padding:26px 16px;font-size:20px;font-weight:800;color:#fff;
+       background:linear-gradient(135deg,#1a73e8,#7b3fe4);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;
+       box-shadow:0 10px 30px rgba(26,115,232,.35)}
+  .mic.on{background:linear-gradient(135deg,#e53935,#ff7043);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{transform:scale(.98);box-shadow:0 0 0 10px rgba(229,57,53,.15)}}
+  .tip{display:none;background:#2a2410;border:1px solid #5a4a16;color:#ffd77a;border-radius:12px;padding:10px 12px;font-size:14px;margin-top:12px}
+  .tip.show{display:block}
+  textarea{width:100%;margin-top:14px;min-height:84px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--txt);
+       padding:12px;font:inherit;font-size:16px;resize:vertical}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chip{font-size:12.5px;border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:999px;padding:6px 10px;cursor:pointer}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:18px}
+  .card h2{font-size:15px;margin:0 0 12px;color:var(--mut);font-weight:600}
+  label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+  input,select{width:100%;border-radius:10px;border:1px solid var(--line);background:#0e1626;color:var(--txt);padding:11px;font:inherit;font-size:16px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .resumo{font-size:17px;font-weight:600;line-height:1.4;margin:4px 0 0}
+  .save{display:block;text-align:center;text-decoration:none;margin-top:16px;padding:16px;border-radius:14px;background:var(--ok);color:#fff;font-weight:800;font-size:17px}
+  .save.off{background:#2a3550;pointer-events:none;color:var(--mut)}
+  .nota{font-size:12.5px;color:var(--mut);margin-top:10px;line-height:1.5}
+  .hist{list-style:none;padding:0;margin:0}
+  .hist li{padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;display:flex;justify-content:space-between;gap:8px}
+  .hist li:last-child{border:0}
+  .hist a{color:#7fb0ff;text-decoration:none;white-space:nowrap}
+  .empty{color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1>🗓️ Agenda por Voz</h1>
+    <p class="sub">Fale o compromisso → confira → salve no Google Agenda.</p></div>
+    <button class="inst" id="inst">📲 Instalar</button>
+  </div>
+
+  <button class="mic" id="mic">🎤 <span id="micTxt">Falar compromisso</span></button>
+  <div class="tip" id="tip">Toque no <b>🎤 do teclado</b> do celular (Gboard / Samsung) e fale o compromisso. O texto aparece aqui embaixo e eu preencho tudo sozinho.</div>
+
+  <textarea id="txt" placeholder="Ex.: Visita com cliente no Cidade Verde amanhã às 15h"></textarea>
+  <div class="chips" id="chips"></div>
+
+  <div class="card">
+    <h2>Confira antes de salvar</h2>
+    <p class="resumo" id="resumo">—</p>
+    <label>Título</label><input id="fTitulo">
+    <div class="row">
+      <div><label>Data</label><input id="fData" type="date"></div>
+      <div><label>Hora</label><input id="fHora" type="time"></div>
+    </div>
+    <div class="row">
+      <div><label>Duração</label>
+        <select id="fDur">
+          <option value="15">15 min</option><option value="30">30 min</option>
+          <option value="60" selected>1 hora</option><option value="90">1h30</option>
+          <option value="120">2 horas</option><option value="180">3 horas</option>
+          <option value="dia">Dia inteiro</option>
+        </select></div>
+      <div><label>Local (opcional)</label><input id="fLocal" placeholder="Endereço"></div>
+    </div>
+    <a class="save off" id="save" href="#" target="_blank" rel="noopener">✅ Salvar no Google Agenda</a>
+    <div class="ok" id="ok">Abriu o Google Agenda — toque em <b>Save / Salvar</b> lá. Depois volte aqui para lançar o próximo.</div>
+    <p class="nota">Abre o Google Agenda já preenchido — é só tocar em <b>Save / Salvar</b>. O aviso no celular segue as <b>notificações padrão</b> da sua agenda (ajuste uma vez em Configurações → Notificações do evento).</p>
+  </div>
+
+  <div class="card">
+    <h2>Últimos lançados</h2>
+    <ul class="hist" id="hist"></ul>
+  </div>
+</div>
+
+<script>
+/*PARSER*/
+function semAcento(s){return s.split('').map(c=>c.normalize('NFD').replace(/[̀-ͯ]/g,'')||c).join('').toLowerCase();}
+const MESES={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
+const DIAS={domingo:0,segunda:1,terca:2,quarta:3,quinta:4,sexta:5,sabado:6};
+const NUMS={um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6};
+const MES_RE='(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)';
+
+function interpretar(texto, agora){
+  agora = agora || new Date();
+  let n = semAcento(texto);
+  let t = texto.split('');
+  const r = {titulo:'', data:null, hora:null, min:0, dur:60, diaTodo:false};
+  function take(re){
+    const m = re.exec(n);
+    if(m){ for(let i=m.index;i<m.index+m[0].length;i++){ t[i]=' '; } n = n.slice(0,m.index)+' '.repeat(m[0].length)+n.slice(m.index+m[0].length); }
+    return m;
+  }
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const addDias = d => new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()+d);
+  const futuro = (dia, mes, ano) => {
+    let d = new Date(ano||hoje.getFullYear(), (mes||hoje.getMonth()+1)-1, dia);
+    if(!ano && d < hoje){ d = mes ? new Date(d.getFullYear()+1, mes-1, dia) : new Date(hoje.getFullYear(), hoje.getMonth()+1, dia); }
+    return d;
+  };
+  let m;
+  // ---- DATA ----
+  if((m = take(/\b(?:no\s+|na\s+|para\s+|pra\s+)?(?:dia\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))){
+    let ano = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : null;
+    r.data = futuro(+m[1], +m[2], ano);
+  } else if((m = take(new RegExp('\\b(?:no\\s+|para\\s+|pra\\s+)?(?:dia\\s+)?(\\d{1,2})\\s+de\\s+'+MES_RE+'\\b')))){
+    r.data = futuro(+m[1], MESES[m[2]]);
+  } else if((m = take(/\b(?:no\s+|para\s+o?\s*|pra\s+o?\s*)?dia\s+(\d{1,2})\b/))){
+    r.data = futuro(+m[1]);
+  } else if((m = take(/\b(?:para\s+|pra\s+)?depois\s+de\s+amanha\b/))){
+    r.data = addDias(2);
+  } else if((m = take(/\b(?:para\s+|pra\s+)?amanha\b/))){
+    r.data = addDias(1);
+  } else if((m = take(/\b(?:para\s+|pra\s+)?hoje\b/))){
+    r.data = addDias(0);
+  } else if((m = take(/\b(?:(?:na|no|nesta|neste|nessa|nesse|essa|esse|esta|este|proxima|proximo|para|pra)\s+)*(segunda|terca|quarta|quinta|sexta|sabado|domingo)(?:\s*-?\s*feira)?(?:\s+que\s+vem)?\b/))){
+    let diff = (DIAS[m[1]] - hoje.getDay() + 7) % 7; if(diff===0) diff = 7;
+    r.data = addDias(diff);
+  }
+  // ---- DURAÇÃO ----
+  if((m = take(/\b(?:por|durante)\s+(meia|\d{1,3}|uma|duas|tres)\s*(horas?|h|minutos?|min)\b/))){
+    let v = m[1]==='meia' ? 0.5 : (NUMS[m[1]] || +m[1]);
+    r.dur = /^h/.test(m[2]) ? Math.round(v*60) : v;
+  } else if(take(/\b(?:por|durante)\s+meia\s+hora\b/)) r.dur = 30;
+  if(take(/\b(?:o\s+)?dia\s+(?:todo|inteiro)\b/)) r.diaTodo = true;
+  // ---- HORA ----
+  const per = p => p ? (/tarde|noite/.test(p) ? 'pm' : (/madrugada/.test(p) ? 'mad' : 'am')) : null;
+  const minOf = x => !x ? 0 : (x==='meia' ? 30 : +x);
+  if((m = take(/\b(?:(?:para|pra)\s+)?meio[\s-]?dia(?:\s+e\s+(meia|\d{1,2}))?\b/))){ r.hora=12; r.min=minOf(m[1]); }
+  else if((m = take(/\b(?:(?:para|pra)\s+)?meia[\s-]?noite\b/))){ r.hora=0; r.min=0; }
+  else if((m = take(/\b(?:(?:para|pra|pras)\s+)?(?:as\s+|a\s+)?(\d{1,2})\s*(?:h|:|horas?)\s*(?:e\s*)?(meia|\d{2})?(?:\s*min(?:utos)?)?(?:\s+(da\s+manha|da\s+tarde|da\s+noite|da\s+madrugada))?(?![a-z0-9])/))){
+    r.hora=+m[1]; r.min=minOf(m[2]); r._p=per(m[3]);
+  }
+  else if((m = take(/\b(?:(?:para|pra|pras)\s+)?(?:as\s+|a\s+)?(\d{1,2})(?:\s+e\s+(meia|\d{1,2}))?\s+(da\s+manha|da\s+tarde|da\s+noite|da\s+madrugada)\b/))){
+    r.hora=+m[1]; r.min=minOf(m[2]); r._p=per(m[3]);
+  }
+  else if((m = take(/\b(?:(?:para|pra|pras)\s+)?as\s+(\d{1,2})(?:\s+e\s+(meia|\d{1,2}))?\b/))){
+    r.hora=+m[1]; r.min=minOf(m[2]);
+  }
+  if(r.hora!==null){
+    if(r._p==='pm' && r.hora<12) r.hora+=12;
+    else if(!r._p && r.hora>=1 && r.hora<=6) r.hora+=12; // "às 3" = 15h (horário comercial)
+    if(r.hora>23 || r.min>59){ r.hora=null; r.min=0; }
+  }
+  delete r._p;
+  // sem data: hoje se ainda dá tempo, senão amanhã
+  if(!r.data){
+    if(r.hora!==null){
+      const h = new Date(hoje); h.setHours(r.hora, r.min);
+      r.data = h > agora ? addDias(0) : addDias(1);
+    } else r.data = null;
+  }
+  if(r.hora===null && r.data) r.diaTodo = true;
+  // ---- TÍTULO ----
+  let tit = t.join('').replace(/\s+/g,' ').trim();
+  const FILL = /^(?:(?:eu|tenho|tem|vou|ter|marcar|marca|marque|agendar|agende|agenda|anota|anotar|anote|adicionar|adiciona|adicione|coloca|colocar|coloque|lembrar|lembra|lembre|me|de|que|um|uma|compromisso|na|no|agenda|minha|o|a|,|:|-)\s+)+/;
+  for(let k=0;k<3;k++){
+    const nn = semAcento(tit); const f = FILL.exec(nn+' ');
+    if(f && f[0].length){ tit = tit.slice(Math.min(f[0].length, tit.length)).trim(); }
+    tit = tit.replace(/(?:\s+|^)(?:as|às|a|à|para|pra|de|do|da|no|na|e|,|\.|-)\s*$/i,'').trim();
+    tit = tit.replace(/^[,.\-:\s]+|[,.\-:\s]+$/g,'');
+  }
+  tit = tit.replace(/\s+([,.])/g,'$1');
+  r.titulo = tit ? tit.charAt(0).toUpperCase()+tit.slice(1) : '';
+  return r;
+}
+/*END*/
+
+const $ = id => document.getElementById(id);
+const pad = x => String(x).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const SEM = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+
+function preencher(){
+  const r = interpretar($('txt').value);
+  $('fTitulo').value = r.titulo;
+  $('fData').value = r.data ? ymd(r.data) : '';
+  $('fHora').value = r.hora!==null ? pad(r.hora)+':'+pad(r.min) : '';
+  $('fDur').value = r.diaTodo ? 'dia' : (['15','30','60','90','120','180'].includes(String(r.dur)) ? String(r.dur) : '60');
+  atualizar();
+}
+
+function montar(){
+  const titulo = $('fTitulo').value.trim(), data = $('fData').value, hora = $('fHora').value;
+  const dur = $('fDur').value, local = $('fLocal').value.trim();
+  if(!titulo || !data) return null;
+  const [Y,M,D] = data.split('-').map(Number);
+  let dates, quando;
+  const ini = new Date(Y, M-1, D);
+  const fd = d => d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
+  if(dur==='dia' || !hora){
+    const fim = new Date(Y, M-1, D+1);
+    dates = fd(ini)+'/'+fd(fim);
+    quando = SEM[ini.getDay()]+', '+pad(D)+'/'+pad(M)+' (dia inteiro)';
+  } else {
+    const [h,mi] = hora.split(':').map(Number);
+    ini.setHours(h, mi);
+    const fim = new Date(ini.getTime() + (+dur)*60000);
+    const ft = d => fd(d)+'T'+pad(d.getHours())+pad(d.getMinutes())+'00';
+    dates = ft(ini)+'/'+ft(fim);
+    quando = SEM[ini.getDay()]+', '+pad(D)+'/'+pad(M)+' às '+hora;
+  }
+  const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + '&text=' + encodeURIComponent(titulo)
+    + '&dates=' + dates
+    + '&ctz=America/Fortaleza'
+    + '&details=' + encodeURIComponent('Lançado pelo Agenda por Voz: "' + $('txt').value.trim() + '"')
+    + (local ? '&location=' + encodeURIComponent(local) : '');
+  return {url, titulo, quando};
+}
+
+function atualizar(){
+  const ev = montar();
+  const a = $('save');
+  if(ev){ a.href = ev.url; a.classList.remove('off'); $('resumo').textContent = '📌 ' + ev.titulo + ' — ' + ev.quando; }
+  else { a.href = '#'; a.classList.add('off'); $('resumo').textContent = $('txt').value.trim() ? 'Falta o título ou a data — complete abaixo.' : '—'; }
+}
+
+// histórico (só neste aparelho)
+function lerHist(){ try{ return JSON.parse(localStorage.getItem('agvoz_hist')||'[]'); }catch(e){ return []; } }
+function gravarHist(ev){ try{ const h = lerHist(); h.unshift({t:ev.titulo,q:ev.quando,u:ev.url}); localStorage.setItem('agvoz_hist', JSON.stringify(h.slice(0,10))); }catch(e){} mostrarHist(); }
+function mostrarHist(){
+  const h = lerHist(), ul = $('hist');
+  ul.innerHTML = h.length ? '' : '<li class="empty">Nada ainda.</li>';
+  h.forEach(x=>{ const li=document.createElement('li'); const s=document.createElement('span'); s.textContent=x.t+' — '+x.q;
+    const a=document.createElement('a'); a.href=x.u; a.target='_blank'; a.rel='noopener'; a.textContent='abrir'; li.append(s,a); ul.append(li); });
+}
+
+$('save').addEventListener('click', ()=>{ const ev = montar(); if(ev){ gravarHist(ev); $('ok').classList.add('show'); setTimeout(()=>{ $('txt').value=''; $('fLocal').value=''; preencher(); }, 1500); } });
+
+// instalar como app (Android/Chrome)
+let pedido = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); pedido = e; $('inst').classList.add('show'); });
+$('inst').addEventListener('click', async ()=>{ if(!pedido) return; pedido.prompt(); try{ await pedido.userChoice; }catch(e){} pedido=null; $('inst').classList.remove('show'); });
+try{ if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){}
+['fTitulo','fData','fHora','fDur','fLocal'].forEach(id => $(id).addEventListener('input', atualizar));
+let tmr; $('txt').addEventListener('input', ()=>{ clearTimeout(tmr); tmr = setTimeout(preencher, 250); });
+
+// exemplos
+['Visita com cliente no Cidade Verde amanhã às 15h','Assinatura de contrato na Caixa dia 12 às 9 e meia','Reunião com construtora sexta às 3 da tarde por 2 horas','Mostrar terreno em Tibau sábado 8h']
+ .forEach(x=>{ const b=document.createElement('button'); b.className='chip'; b.textContent=x; b.onclick=()=>{ $('txt').value=x; preencher(); }; $('chips').append(b); });
+
+// microfone
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, ouvindo = false;
+function semMic(){ $('tip').classList.add('show'); $('txt').focus(); }
+$('mic').addEventListener('click', ()=>{
+  if(!SR){ semMic(); return; }
+  if(ouvindo){ try{ rec.stop(); }catch(e){} return; }
+  try{
+    rec = new SR(); rec.lang='pt-BR'; rec.interimResults=true; rec.continuous=false;
+    rec.onstart = ()=>{ ouvindo=true; $('mic').classList.add('on'); $('micTxt').textContent='Ouvindo… toque para parar'; };
+    rec.onresult = e => { let s=''; for(const res of e.results) s += res[0].transcript; $('txt').value = s; preencher(); };
+    rec.onerror = () => { semMic(); };
+    rec.onend = ()=>{ ouvindo=false; $('mic').classList.remove('on'); $('micTxt').textContent='Falar compromisso'; };
+    rec.start();
+  }catch(e){ semMic(); }
+});
+
+mostrarHist();
+</script>
+</body>
+</html>
